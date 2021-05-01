@@ -1,8 +1,32 @@
 pragma solidity ^0.6.12;
 // SPDX-License-Identifier: Unlicensed
-interface IERC20 {
+pragma solidity 0.6.4;
 
+interface IBEP20 {
+    /**
+     * @dev Returns the amount of tokens in existence.
+     */
     function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the token decimals.
+     */
+    function decimals() external view returns (uint8);
+
+    /**
+     * @dev Returns the token symbol.
+     */
+    function symbol() external view returns (string memory);
+
+    /**
+     * @dev Returns the token name.
+     */
+    function name() external view returns (string memory);
+
+    /**
+     * @dev Returns the bep token owner.
+     */
+    function getOwner() external view returns (address);
 
     /**
      * @dev Returns the amount of tokens owned by `account`.
@@ -293,6 +317,7 @@ library Address {
         require(address(this).balance >= amount, "Address: insufficient balance");
 
         // solhint-disable-next-line avoid-low-level-calls, avoid-call-value
+        // What does this piece of code do ????
         (bool success, ) = recipient.call{ value: amount }("");
         require(success, "Address: unable to send value, recipient may have reverted");
     }
@@ -680,7 +705,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 }
 
 
-contract SafeMoon is Context, IERC20, Ownable {
+contract SafeMoon is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
@@ -761,6 +786,10 @@ contract SafeMoon is Context, IERC20, Ownable {
         return _decimals;
     }
 
+    function getOwner() external view returns (address) {
+        return owner();
+    }
+
     function totalSupply() public view override returns (uint256) {
         return _tTotal;
     }
@@ -786,7 +815,7 @@ contract SafeMoon is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "IBEP20: transfer amount exceeds allowance"));
         return true;
     }
 
@@ -796,7 +825,7 @@ contract SafeMoon is Context, IERC20, Ownable {
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "IBEP20: decreased allowance below zero"));
         return true;
     }
 
@@ -980,8 +1009,8 @@ contract SafeMoon is Context, IERC20, Ownable {
     }
 
     function _approve(address owner, address spender, uint256 amount) private {
-        require(owner != address(0), "ERC20: approve from the zero address");
-        require(spender != address(0), "ERC20: approve to the zero address");
+        require(owner != address(0), "IBEP20: approve from the zero address");
+        require(spender != address(0), "IBEP20: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -992,8 +1021,8 @@ contract SafeMoon is Context, IERC20, Ownable {
         address to,
         uint256 amount
     ) private {
-        require(from != address(0), "ERC20: transfer from the zero address");
-        require(to != address(0), "ERC20: transfer to the zero address");
+        require(from != address(0), "IBEP20: transfer from the zero address");
+        require(to != address(0), "IBEP20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
