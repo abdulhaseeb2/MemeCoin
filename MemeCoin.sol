@@ -680,10 +680,20 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     mapping (address => mapping (address => uint256)) private _allowances;
 
+    //To exclude addresses from getting the 5% fee distributed among them?
+    //Or from them to not pay the 5% fee ?
+    mapping (address => bool) private _isExcludedFromFee;
+
+    //To exclude address from getting the holder's reward
+    mapping (address => bool) private _isExcludedFromReward;
+
     uint256 private _totalSupply = 1000000000 * 10**6 * 10**9;
     uint8 private _decimals = 9;
     string private _symbol = "MEMECOIN";
     string private _name = "MemeCoin";
+
+    //no idea what this is being used for
+    uint256 private _tFeeTotal;
 
     uint256 public _taxFee = 5; //maybe the fee that gets distributed among holders ?
     uint256 private _previousTaxFee = _taxFee; // no idea what this is
@@ -691,8 +701,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
     uint256 public _liquidityFee = 5; //where does this go ?
     uint256 private _previousLiquidityFee = _liquidityFee; //no idea what this is
 
-    IPancakeRouter02 public immutable pancakeswapV2Router;
-    address public immutable pancakeswapV2Pair;
+    IPancakeRouter02 public immutable pancakeswapRouter;
+    address public immutable pancakeswapPair;
 
     bool inSwapAndLiquify; //no idea what this is
     bool public swapAndLiquifyEnabled = true; // and this...
@@ -721,7 +731,17 @@ contract MemeCoin is Context, IBEP20, Ownable {
     constructor() public {
     _balances[_msgSender()] = _totalSupply;
 
-    IPancakeRouter02 _pancakeswapV2Router = IPancakeRouter02();
+    IPancakeRouter02 _pancakeswapRouter = IPancakeRouter02(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+
+    //Create a pancakeswap pair for this new token
+    pancakeswapPair = IPancakeFactory(_pancakeswapRouter.factory())
+        .createPair(address(this), _pancakeswapRouter.WETH());
+
+    pancakeswapRouter = _pancakeswapRouter;
+
+    //excluding this contract and the owner from the fee
+    _isExcludedFromFee[owner()] = true;
+    _isExcludedFromFee[address(this)] = true;
 
     emit Transfer(address(0), _msgSender(), _totalSupply);
 
@@ -747,130 +767,254 @@ contract MemeCoin is Context, IBEP20, Ownable {
         return _totalSupply;
     }
 
+    //this function to be looked at later
     function balanceOf(address account) external view returns (uint256) {
         return _balances[account];
     }
 
-    /**
-    * @dev See {BEP20-transfer}.
-    *
-    * Requirements:
-    *
-    * - `recipient` cannot be the zero address.
-    * - the caller must have a balance of at least `amount`.
-    */
     function transfer(address recipient, uint256 amount) external returns (bool) {
         _transfer(_msgSender(), recipient, amount);
         return true;
     }
 
-    /**
-    * @dev See {BEP20-allowance}.
-    */
     function allowance(address owner, address spender) external view returns (uint256) {
         return _allowances[owner][spender];
     }
 
-    /**
-    * @dev See {BEP20-approve}.
-    *
-    * Requirements:
-    *
-    * - `spender` cannot be the zero address.
-    */
     function approve(address spender, uint256 amount) external returns (bool) {
         _approve(_msgSender(), spender, amount);
         return true;
     }
 
-    /**
-    * @dev See {BEP20-transferFrom}.
-    *
-    * Emits an {Approval} event indicating the updated allowance. This is not
-    * required by the EIP. See the note at the beginning of {BEP20};
-    *
-    * Requirements:
-    * - `sender` and `recipient` cannot be the zero address.
-    * - `sender` must have a balance of at least `amount`.
-    * - the caller must have allowance for `sender`'s tokens of at least
-    * `amount`.
-    */
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
         return true;
     }
 
-    /**
-    * @dev Atomically increases the allowance granted to `spender` by the caller.
-    *
-    * This is an alternative to {approve} that can be used as a mitigation for
-    * problems described in {BEP20-approve}.
-    *
-    * Emits an {Approval} event indicating the updated allowance.
-    *
-    * Requirements:
-    *
-    * - `spender` cannot be the zero address.
-    */
     function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
         return true;
     }
 
-    /**
-    * @dev Atomically decreases the allowance granted to `spender` by the caller.
-    *
-    * This is an alternative to {approve} that can be used as a mitigation for
-    * problems described in {BEP20-approve}.
-    *
-    * Emits an {Approval} event indicating the updated allowance.
-    *
-    * Requirements:
-    *
-    * - `spender` cannot be the zero address.
-    * - `spender` must have allowance for the caller of at least
-    * `subtractedValue`.
-    */
     function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero"));
         return true;
     }
 
-    /**
-    * @dev Creates `amount` tokens and assigns them to `msg.sender`, increasing
-    * the total supply.
-    *
-    * Requirements
-    *
-    * - `msg.sender` must be the token owner
-    */
+    //Do we need this?
     function mint(uint256 amount) public onlyOwner returns (bool) {
         _mint(_msgSender(), amount);
         return true;
     }
 
-    /**
-    * @dev Moves tokens `amount` from `sender` to `recipient`.
-    *
-    * This is internal function is equivalent to {transfer}, and can be used to
-    * e.g. implement automatic token fees, slashing mechanisms, etc.
-    *
-    * Emits a {Transfer} event.
-    *
-    * Requirements:
-    *
-    * - `sender` cannot be the zero address.
-    * - `recipient` cannot be the zero address.
-    * - `sender` must have a balance of at least `amount`.
-    */
-    function _transfer(address sender, address recipient, uint256 amount) internal {
+    function isExcludedFromTaxReward(address account) public view returns (bool) {
+        return _isExcludedFromReward[account];
+    }
+
+    //might need to be looked at later
+    function totalFees() public view returns (uint256) {
+        return _tFeeTotal;
+    }
+
+    //might need to be looked at later
+    function excludeFromReward(address account) public onlyOwner() {
+        require(!_isExcludedFromReward[account], "Account is already excluded from reward");
+        _isExcludedFromReward[account] = true;
+    }
+
+    //might need to be looked at later
+    function includeInReward(address account) external onlyOwner() {
+        require(_isExcludedFromReward[account], "Account is already included in the reward")
+        _isExcludedFromReward[account] = false;
+    }
+
+    function excludeFromPayingFee(address account) public onlyOwner {
+        require(!_isExcludedFromFee[account], "Account is already excluded from fee");
+        _isExcludedFromFee[account] = true;
+    }
+
+    function includeInPayingFee(address account) public onlyOwner {
+        require(_isExcludedFromFee[account], "Account is already included in paying fee");
+        _isExcludedFromFee[account] = false;
+    }
+
+    function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
+        _taxFee = taxFee;
+    }
+
+    function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
+        _liquidityFee = liquidityFee;
+    }
+
+    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
+        swapAndLiquifyEnabled = _enabled;
+        emit SwapAndLiquifyEnabledUpdated(_enabled);
+    }
+
+    //To receive ETH from PancakeswapRouter when swapping
+    receive() external payable {}
+
+    function calculateTaxFee(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_taxFee).div(
+            10**2
+        );
+    }
+
+    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_liquidityFee).div(
+            10**2
+        );
+    }
+
+    function removeAllFee() private {
+        if (_taxFee == 0 && _liquidityFee == 0) return;
+
+        _previousTaxFee = _taxFee;
+        _previousLiquidityFee = _liquidityFee;
+
+        _taxFee = 0;
+        _liquidityFee = 0;
+    }
+
+    function restoreAllFee() private {
+        _taxFee = _previousTaxFee;
+        _liquidityFee = _previousLiquidityFee;
+    }
+
+    fucntion isExcludedFromFee(address account) public view returns(bool) {
+        return _isExcludedFromFee[account];
+    }
+
+    //This functions needs a review
+    function _transfer(address sender, address recipient, uint256 amount) private {
         require(sender != address(0), "BEP20: transfer from the zero address");
         require(recipient != address(0), "BEP20: transfer to the zero address");
+        require(amount > 0, "Transfer amount must be greater than zero");
 
-        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        // is the token balance of this contract address over the min number of
+        // tokens that we need to initiate a swap + liquidity lock?
+        // also, don't get caught in a circular liquidity event.
+        // also, don't swap & liquify if sender is pancakeswap pair.
+        uint256 contractTokenBalance = balanceOf(address(this));
+
+        //Do we need to keep a maximum transaction amount?
+
+        bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
+        if (
+            overMinTokenBalance &&
+            !inSwapAndLiquify &&
+            from != pancakeswapPair &&
+            swapAndLiquifyEnabled
+        ) {
+            contractTokenBalance = numTokensSellToAddToLiquidity;
+            //add liquidity
+            SwapAndLiquify(contractTokenBalance);
+        }
+
+        //indicates if fee should be deducted from transfer
+        bool takeFee = true;
+
+        //if any of the accounts is excluded from fee then the fee is removed
+        if (_isExcludedFromFee[from] || _isExcludedFromFee[to]){
+            takeFee = false;
+        }
+
+        //transfer amount, take tax, burn, liquidity fee
+        _tokenTransfer(from, to, amount, takeFee);
+
+        // _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        // _balances[recipient] = _balances[recipient].add(amount);
+        // emit Transfer(sender, recipient, amount);
+    }
+
+    //functions needs review as well
+    function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
+        
+        //dividing the contract balance into halves
+        uint256 half = contractTokenBalance.div(2);
+        uint256 otherHalf = contractTokenBalance.sub(half);
+
+        // capture the contract's current ETH balance.
+        // this is so that we can capture exactly the amount of ETH that the
+        // swap creates, and not make the liquidity event include any ETH that
+        // has been manually sent to the contract
+        uint256 initialBalance = address(this).balance;
+
+        //swap Tokens for ETH
+        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+
+        // how much ETH did we just swap into?
+        uint256 newBalance = address(this).balance.sub(initialBalance);
+
+        //add liquidity to pancakeswap
+        addLiquidity(otherHalf, newBalance);
+
+        emit SwapAndLiquify(half, newBalance, otherHalf);
+    }
+
+    function swapTokensForEth(uint256 tokenAmount) private {
+
+        //generate the pancakeswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = pancakeswapRouter.WETH();
+
+        _approve(address(this), address(pancakeswapRouter), tokenAmount);
+
+        //make the swap
+        pancakeswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, //accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        )
+    }
+
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+        //approve token transfer to cover all possible scenarios
+        _approve(address(this), address(pancakeswapRouter), tokenAmount);
+
+        //add the liquidity
+        pancakeswapRouter.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0, //slippage is unavoidable
+            0, //slippage is unavoidable
+            owner(),
+            block.timestamp
+        );
+
+    }
+
+    //this function is responsible for taking all fee, if takeFee is true
+    //this function needs heavy review
+    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee) private {
+        if (!takeFee)
+            removeAllFee();
+
+        _transferStandard(sender, recipient, amount);
+
+        if (!takeFee)
+            restoreAllFee();
+    }
+
+    //this function needs to be reviewed later
+    //might need to do more in this function
+    function _transferStandard(address sender, address recipient, uint256 amount) private {
+        _balances[sender] = _balances[sender].sub(amount);
         _balances[recipient] = _balances[recipient].add(amount);
+        
         emit Transfer(sender, recipient, amount);
+    }
+
+    function _approve(address owner, address spender, uint256 amount) private {
+        require(owner != address(0), "BEP20: approve from the zero address");
+        require(spender != address(0), "BEP20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
     }
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
@@ -907,27 +1051,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _balances[account] = _balances[account].sub(amount, "BEP20: burn amount exceeds balance");
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
-    }
-
-    /**
-    * @dev Sets `amount` as the allowance of `spender` over the `owner`s tokens.
-    *
-    * This is internal function is equivalent to `approve`, and can be used to
-    * e.g. set automatic allowances for certain subsystems, etc.
-    *
-    * Emits an {Approval} event.
-    *
-    * Requirements:
-    *
-    * - `owner` cannot be the zero address.
-    * - `spender` cannot be the zero address.
-    */
-    function _approve(address owner, address spender, uint256 amount) internal {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
-
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
     }
 
     /**
