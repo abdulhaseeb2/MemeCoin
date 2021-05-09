@@ -752,6 +752,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
 
+    function getOwner() external view returns (address) {
+        return owner();
+    }
+
     function name() public view returns (string memory) {
         return _name;
     }
