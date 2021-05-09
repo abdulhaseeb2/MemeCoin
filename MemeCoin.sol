@@ -1004,7 +1004,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // is the token balance of this contract address over the min number of
         // tokens that we need to initiate a swap + liquidity lock?
         // also, don't get caught in a circular liquidity event.
-        // also, don't swap & liquify if sender is uniswap pair.
+        // also, don't swap & liquify if sender is pancakeswap pair.
         uint256 contractTokenBalance = balanceOf(address(this));
         
         if(contractTokenBalance >= _maxTxAmount)
@@ -1016,7 +1016,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         if (
             overMinTokenBalance &&
             !inSwapAndLiquify &&
-            from != uniswapV2Pair &&
+            from != pancakePair &&
             swapAndLiquifyEnabled
         ) {
             contractTokenBalance = numTokensSellToAddToLiquidity;
@@ -1053,7 +1053,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // how much ETH did we just swap into?
         uint256 newBalance = address(this).balance.sub(initialBalance);
 
-        // add liquidity to uniswap
+        // add liquidity to pancakeswap
         addLiquidity(otherHalf, newBalance);
         
         emit SwapAndLiquify(half, newBalance, otherHalf);
