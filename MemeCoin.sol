@@ -690,6 +690,15 @@ contract MemeCoin is Context, IBEP20, Ownable {
     mapping (address => bool) private _isExcluded;
     address[] private _excluded;
 
+    struct Charity {
+
+        address charityAddress;
+        uint256 charityTokens;
+    }
+
+    //This is where we will store our animal charity tokens
+    Charity private _charity;
+
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
     uint256 private _tTotal = 1000000000 * 10**6 * 10**9;
@@ -703,8 +712,11 @@ contract MemeCoin is Context, IBEP20, Ownable {
     uint256 public _taxFee = 5;
     uint256 private _previousTaxFee = _taxFee;
     
-    uint256 public _liquidityFee = 5;
+    uint256 public _liquidityFee = 1;
     uint256 private _previousLiquidityFee = _liquidityFee;
+
+    uint256 public _donationFee = 5;
+    uint256 private _previousDonationFee = _donationFee;
 
     IPancakeRouter02 public immutable pancakeRouter;
     address public immutable pancakePair;
@@ -744,10 +756,13 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // set the rest of the contract variables
         pancakeRouter = _pancakeRouter;
 
+        _charity = Charity(/*Address*/, 0);
+
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
+        _isExcludedFromFee[_charity.charityAddress] = true;
 
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
@@ -815,10 +830,18 @@ contract MemeCoin is Context, IBEP20, Ownable {
         return _tFeeTotal;
     }
 
+    function charityAddress() public view returns (address) {
+        return _charity.charityAddress;
+    }
+
+    function charityTokens() public view returns (uint256) {
+        return _charity.charityTokens;
+    }
+
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
         require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-        (uint256 rAmount,,,,,) = _getValues(tAmount);
+        (uint256 rAmount,,,,,,) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rTotal = _rTotal.sub(rAmount);
         _tFeeTotal = _tFeeTotal.add(tAmount);
@@ -827,10 +850,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
-            (uint256 rAmount,,,,,) = _getValues(tAmount);
+            (uint256 rAmount,,,,,,) = _getValues(tAmount);
             return rAmount;
         } else {
-            (,uint256 rTransferAmount,,,,) = _getValues(tAmount);
+            (,uint256 rTransferAmount,,,,,) = _getValues(tAmount);
             return rTransferAmount;
         }
     }
@@ -864,14 +887,22 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
+        _addToDonation(tDonation);
         emit Transfer(sender, recipient, tTransferAmount);
+    }
+
+    function changeCharityAddress(address newAddress) public onlyOwner {
+        //TODO: Make sure there are no tokens left in the old charity address?
+        _charity.charityAddress = newAddress;
+        _charity.charityTokens = 0;
+        excludeFromFee(_charity.charityAddress); 
     }
 
     function excludeFromFee(address account) public onlyOwner {
@@ -888,6 +919,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
     
     function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
         _liquidityFee = liquidityFee;
+    }
+
+    function setDonationFeePercent(uint256 donationFee) external onlyOwner() {
+        _donationFee = donationFee;
     }
 
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
@@ -909,24 +944,26 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _tFeeTotal = _tFeeTotal.add(tFee);
     }
 
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
+    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getTValues(tAmount);
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
+        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tDonation);
     }
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
+    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256) {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
-        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
-        return (tTransferAmount, tFee, tLiquidity);
+        uint256 tDonation = calculateDonationFee(tAmount);
+        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity).sub(tDonation);
+        return (tTransferAmount, tFee, tLiquidity, tDonation);
     }
 
+    //what is reflection amount being subtracted? Should we include rDonation as well ?
     function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);
+        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);//.sub(rDonation)
         return (rAmount, rTransferAmount, rFee);
     }
 
@@ -967,19 +1004,28 @@ contract MemeCoin is Context, IBEP20, Ownable {
         );
     }
 
+    function calculateDonationFee(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_donationFee).div(
+            10**2
+        );
+    }
+
     function removeAllFee() private {
-        if(_taxFee == 0 && _liquidityFee == 0) return;
+        if(_taxFee == 0 && _liquidityFee == 0 && _donationFee == 0) return;
         
         _previousTaxFee = _taxFee;
         _previousLiquidityFee = _liquidityFee;
+        _previousDonationFee = _donationFee;
         
         _taxFee = 0;
         _liquidityFee = 0;
+        _donationFee = 0;
     }
 
     function restoreAllFee() private {
         _taxFee = _previousTaxFee;
         _liquidityFee = _previousLiquidityFee;
+        _donationFee = _previousDonationFee;
     }
 
     function isExcludedFromFee(address account) public view returns(bool) {
@@ -1118,31 +1164,45 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
+        _addToDonation(tDonation);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
+        _addToDonation(tDonation);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
+        _addToDonation(tDonation);
         emit Transfer(sender, recipient, tTransferAmount);
+    }
+
+    function _addToDonation(uint256 tDonation) private {
+        //Here we will add implementation
+        //to donate to the charity
+        //e.g
+        // charity[address] += tDonation;
+
+        require(_charity.charityAddress != address(0), "Charity Address cannot be zero address!");
+        require(tDonation > 0, "Donation should be more than zero");
+        _charity.charityTokens += tDonation;
     }
 }
