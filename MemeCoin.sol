@@ -756,7 +756,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // set the rest of the contract variables
         pancakeRouter = _pancakeRouter;
 
-        _charity = Charity(/*Address*/, 0);
+        _charity = Charity(/*Address*/address(0), 0);
 
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
@@ -767,19 +767,19 @@ contract MemeCoin is Context, IBEP20, Ownable {
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
 
-    function getOwner() external view returns (address) {
+    function getOwner() external view override returns (address) {
         return owner();
     }
 
-    function name() public view returns (string memory) {
+    function name() public view override returns (string memory) {
         return _name;
     }
 
-    function symbol() public view returns (string memory) {
+    function symbol() public view override returns (string memory) {
         return _symbol;
     }
 
-    function decimals() public view returns (uint8) {
+    function decimals() public view override returns (uint8) {
         return _decimals;
     }
 
