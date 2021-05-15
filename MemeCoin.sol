@@ -672,6 +672,49 @@ interface IPancakeRouter02 is IPancakeRouter01 {
     ) external;
 }
 
+contract TimeLock {
+    using SafeMath for uint256;
+
+    IBEP20 token;
+
+    struct TimeLockStruct {
+        address beneficiary;
+        uint256 balance;
+        uint256 releaseTime;
+    }
+
+    TimeLockStruct[] public timeLockStructs;
+
+    event LogTimeLockDeposit(address sender, uint256 amount, uint256 releaseTime);
+    event LogTimeLockWithdrawal(address receiver, uint256 amount);
+
+    constructor(address tokenContract) public {
+        token = IBEP20(tokenContract);
+    }
+
+    function deposit(address beneficiary, uint256 amount, uint256 releaseTime) public returns (bool success) {
+        require(token.transferFrom(msg.sender, address(this), amount));
+        TimeLockStruct memory timeLockStruct;
+        timeLockStruct.beneficiary = beneficiary;
+        timeLockStruct.balance = amount;
+        timeLockStruct.releaseTime = releaseTime;
+        timeLockStructs.push(timeLockStruct);
+        emit LogTimeLockDeposit(msg.sender, amount, releaseTime);
+        return true;
+    }
+
+    function withdraw(uint256 timeLockNum) public returns (bool success) {
+        TimeLockStruct storage timeLockStruct = timeLockStructs[timeLockNum];
+        require(timeLockStruct.beneficiary == msg.sender);
+        require(timeLockStruct.releaseTime <= now);
+        uint256 amount = timeLockStruct.balance;
+        timeLockStruct.balance = 0;
+        emit LogTimeLockWithdrawal(msg.sender, amount);
+        require(token.transfer(msg.sender, amount));
+        return true;
+    }
+}
+
 contract MemeCoin is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
@@ -692,6 +735,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     address private charityAddress;
 
+    //Will be used for keeping 90%
+    //funds locked for a month
+    TimeLockStruct private timeLockStruct;
+
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
     uint256 private _tTotal = 1000000000000000 * 10**9;
@@ -710,6 +757,9 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     uint256 public _donationFee = 5;
     uint256 private _previousDonationFee = _donationFee;
+
+    uint256 public _tokensToFreeze = 90;
+    uint256 private _previousTokensToFreeze = _tokensToFreeze;
 
     IPancakeRouter02 public immutable pancakeRouter;
     address public immutable pancakePair;
@@ -759,6 +809,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _isExcludedFromFee[address(this)] = true;
         _isExcludedFromFee[charityAddress] = true;
         _isExcluded[charityAddress] = true;
+
+        timeLockStruct = TimeLockStruct(address(this));
 
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
@@ -912,6 +964,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function setDonationFeePercent(uint256 donationFee) external onlyOwner() {
         _donationFee = donationFee;
+    }
+
+    function setTokensToFreezePercent(uint256 tokensToFreeze) external onlyOwner() {
+        _tokensToFreeze = tokensToFreeze;
     }
 
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
