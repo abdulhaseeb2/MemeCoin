@@ -690,18 +690,11 @@ contract MemeCoin is Context, IBEP20, Ownable {
     mapping (address => bool) private _isExcluded;
     address[] private _excluded;
 
-    struct Charity {
-
-        address charityAddress;
-        uint256 charityTokens;
-    }
-
-    //This is where we will store our animal charity tokens
-    Charity private _charity;
+    address private charityAddress;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal = 1000000000 * 10**6 * 10**9;
+    uint256 private _tTotal = 1000000000000000 * 10**9;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
@@ -756,13 +749,16 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // set the rest of the contract variables
         pancakeRouter = _pancakeRouter;
 
-        _charity = Charity(/*Address*/address(0), 0);
+        //currently the address is 0
+        //but will need to be changed
+        charityAddress = Address(0);
 
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[_charity.charityAddress] = true;
+        _isExcludedFromFee[charityAddress] = true;
+        _isExcluded[charityAddress] = true;
 
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
@@ -831,11 +827,11 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function charityAddress() public view returns (address) {
-        return _charity.charityAddress;
+        return charityAddress;
     }
 
     function charityTokens() public view returns (uint256) {
-        return _charity.charityTokens;
+        return _rOwned[charityAddress];
     }
 
     function deliver(uint256 tAmount) public {
@@ -896,13 +892,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
         emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    function changeCharityAddress(address newAddress) public onlyOwner {
-        //TODO: Make sure there are no tokens left in the old charity address?
-        _charity.charityAddress = newAddress;
-        _charity.charityTokens = 0;
-        excludeFromFee(_charity.charityAddress); 
     }
 
     function excludeFromFee(address account) public onlyOwner {
@@ -1201,8 +1190,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
         //e.g
         // charity[address] += tDonation;
 
-        require(_charity.charityAddress != address(0), "Charity Address cannot be zero address!");
+        require(charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation > 0, "Donation should be more than zero");
-        _charity.charityTokens += tDonation;
+        _rOwned[charityAddress] += tDonation;
     }
 }
