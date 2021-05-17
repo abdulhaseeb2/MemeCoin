@@ -745,7 +745,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal = 1000000000000000 * 10**9;
+    uint256 private _tTotal = 1000000000000000 * 10**6 * 10**9;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
@@ -801,7 +801,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _rOwned[_msgSender()] = _rTotal - amountAdminTokens;
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
-        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(/*0xD99D1c33F9fC3444f8101754aBC46c52416550D1*/ );
+        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
 
         //Create a Pancakeswap Pair for this new token
         //TODO: Replace the router address below with _pancake.factory()
