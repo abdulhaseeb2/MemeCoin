@@ -733,7 +733,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
     mapping (address => bool) private _isExcluded;
     address[] private _excluded;
 
-    address private charityAddress;
+    address private _charityAddress;
 
     address private adminAddress;
 
@@ -741,7 +741,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     //Will be used for keeping 90%
     //funds locked for a month
-    TimeLockStruct private timeLockStruct;
+    TimeLock private timeLock;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
@@ -793,36 +793,42 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     constructor () public {
 
-        adminAddress = Address(0);
+        adminAddress = address(0);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
 
         uint256 amountAdminTokens = allocateAdminTokens();
 
         _rOwned[_msgSender()] = _rTotal - amountAdminTokens;
 
-        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+        //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
+        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(/*0xD99D1c33F9fC3444f8101754aBC46c52416550D1*/ );
 
         //Create a Pancakeswap Pair for this new token
+        //TODO: Replace the router address below with _pancake.factory()
         pancakePair = IPancakeFactory(_pancakeRouter.factory())
             .createPair(address(this), _pancakeRouter.WETH());
+
+        //IPancakeFactory pancakeFac = IPancakeFactory(0x6725F303b657a9451d8BA641348b6761A6CC7a17);
+
+        //address _pancakePair = pancakeFac.createPair(address(this), pancakeRouter.WETH());
 
         // set the rest of the contract variables
         pancakeRouter = _pancakeRouter;
 
         //currently the address is 0
         //but will need to be changed
-        charityAddress = Address(0);
+        _charityAddress = address(0);
 
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[charityAddress] = true;
+        _isExcludedFromFee[_charityAddress] = true;
         _isExcludedFromFee[adminAddress] = true;
-        _isExcluded[charityAddress] = true;
+        _isExcluded[_charityAddress] = true;
         _isExcluded[adminAddress] = true;
 
-        timeLockStruct = TimeLockStruct(address(this));
+        timeLock = TimeLock(address(this));
 
         emit Transfer(address(0), _msgSender(), (_tTotal - amountAdminTokens));
     }
@@ -902,11 +908,11 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function charityAddress() public view returns (address) {
-        return charityAddress;
+        return _charityAddress;
     }
 
     function charityTokens() public view returns (uint256) {
-        return _rOwned[charityAddress];
+        return _rOwned[_charityAddress];
     }
 
     function deliver(uint256 tAmount) public {
@@ -1269,8 +1275,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
         //e.g
         // charity[address] += tDonation;
 
-        require(charityAddress != address(0), "Charity Address cannot be zero address!");
+        require(_charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation > 0, "Donation should be more than zero");
-        _rOwned[charityAddress] += tDonation;
+        _rOwned[_charityAddress] += tDonation;
     }
 }
