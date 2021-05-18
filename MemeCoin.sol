@@ -798,7 +798,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         uint256 amountAdminTokens = allocateAdminTokens();
 
-        _rOwned[_msgSender()] = _rTotal - amountAdminTokens;
+        _rOwned[_msgSender()] = _tTotal - amountAdminTokens;
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
         IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
@@ -838,7 +838,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
             10**2
         );
 
-        _rOwned[adminAddress] = _amountTokens;
+        _tOwned[adminAddress] = _amountTokens;
         emit Transfer(address(0), adminAddress, _amountTokens);
 
         return _amountTokens;
@@ -912,7 +912,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function charityTokens() public view returns (uint256) {
-        return _rOwned[_charityAddress];
+        return _tOwned[_charityAddress];
     }
 
     function deliver(uint256 tAmount) public {
@@ -1277,6 +1277,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation > 0, "Donation should be more than zero");
-        _rOwned[_charityAddress] += tDonation;
+        _tOwned[_charityAddress] += tDonation;
     }
 }
