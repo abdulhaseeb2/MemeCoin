@@ -793,7 +793,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     constructor () public {
 
-        adminAddress = address(0);
+        adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
 
         uint256 amountAdminTokens = allocateAdminTokens();
@@ -817,7 +817,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         //currently the address is 0
         //but will need to be changed
-        _charityAddress = address(0);
+        _charityAddress = address(0x27D9490B2028616B1251701fe0c022fa283DD354);
 
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
