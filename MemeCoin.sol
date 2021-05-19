@@ -1276,7 +1276,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // charity[address] += tDonation;
 
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
-        require(tDonation > 0, "Donation should be more than zero");
+        require(tDonation >= 0, "Donation should be more than or zero");
         _tOwned[_charityAddress] += tDonation;
     }
 }
