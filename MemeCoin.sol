@@ -864,6 +864,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
         return _tTotal;
     }
 
+    function reflectionSupply() public view returns (uint256) {
+        return _rTotal;
+    }
+
     function balanceOf(address account) public view override returns (uint256) {
         if (_isExcluded[account]) return _tOwned[account];
         return tokenFromReflection(_rOwned[account]);
