@@ -793,12 +793,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     constructor () public {
 
-        adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
+        /*adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
 
-        uint256 amountAdminTokens = allocateAdminTokens();
+        uint256 amountAdminTokens = allocateAdminTokens();*/
 
-        _rOwned[_msgSender()] = _tTotal - amountAdminTokens;
+        _rOwned[_msgSender()] = _rTotal /*- amountAdminTokens*/;
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
         IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
@@ -830,7 +830,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         timeLock = TimeLock(address(this));
 
-        emit Transfer(address(0), _msgSender(), (_tTotal - amountAdminTokens));
+        emit Transfer(address(0), _msgSender(), (_rTotal/* - amountAdminTokens*/));
     }
 
     function allocateAdminTokens() private returns (uint256){
@@ -1037,11 +1037,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     //what is reflection amount being subtracted? Should we include rDonation as well ?
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private view returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);//.sub(rDonation)
+        uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
+        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity).sub(rDonation);
         return (rAmount, rTransferAmount, rFee);
     }
 
