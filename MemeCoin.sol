@@ -797,7 +797,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         
         adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
-        allocateAdminTokens();
+        
 
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
@@ -827,11 +827,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _isExcludedFromFee[adminAddress] = true;
         _isExcluded[_charityAddress] = true;
         _isExcluded[adminAddress] = true;
-        _isExcluded[owner()] = true;
-
+        
+        
+        allocateAdminTokens();
         timeLock = TimeLock(address(this));
 
-        emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
+        emit Transfer(address(0), _msgSender(), (_rTotal));
     }
 
     function allocateAdminTokens() private{
@@ -839,7 +840,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
             10**2
         );
         
-         _transfer(_msgSender(), adminAddress, _amountTokens);
+         _tokenTransfer(_msgSender(), adminAddress, _amountTokens, false);
     }
 
     function getOwner() external view override returns (address) {
