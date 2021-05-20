@@ -793,12 +793,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     constructor () public {
 
-        /*adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
+        _rOwned[_msgSender()] = _rTotal;
+        
+        adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
+        allocateAdminTokens();
 
-        uint256 amountAdminTokens = allocateAdminTokens();*/
-
-        _rOwned[_msgSender()] = _rTotal /*- amountAdminTokens*/;
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
         IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
@@ -827,21 +827,19 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _isExcludedFromFee[adminAddress] = true;
         _isExcluded[_charityAddress] = true;
         _isExcluded[adminAddress] = true;
+        _isExcluded[owner()] = true;
 
         timeLock = TimeLock(address(this));
 
-        emit Transfer(address(0), _msgSender(), (_rTotal/* - amountAdminTokens*/));
+        emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
     }
 
-    function allocateAdminTokens() private returns (uint256){
+    function allocateAdminTokens() private{
         uint256 _amountTokens = _tTotal.mul(percentForAdminWallet).div(
             10**2
         );
-
-        _tOwned[adminAddress] = _amountTokens;
-        emit Transfer(address(0), adminAddress, _amountTokens);
-
-        return _amountTokens;
+        
+         _transfer(_msgSender(), adminAddress, _amountTokens);
     }
 
     function getOwner() external view override returns (address) {
