@@ -749,6 +749,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
+    // Mint tokens
+    uint256 private mintTokens = 0;
+    uint256 private mintPercentage = 3;
+
     string private _name = "MemeCoin";
     string private _symbol = "MEMECOIN";
     uint8 private _decimals = 9;
@@ -828,11 +832,25 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _isExcluded[_charityAddress] = true;
         _isExcluded[adminAddress] = true;
         
-        
+        // Allocate token for Minting
+        allocateMintTokens();
+
+        // Allocate tokens for owners
         allocateAdminTokens();
+        
         timeLock = TimeLock(address(this));
 
-        emit Transfer(address(0), _msgSender(), (_rTotal));
+        emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
+    }
+
+    function allocateMintTokens() private{
+        mintTokens = _tTotal.mul(mintPercentage).div(
+            10**2
+        );
+    }
+
+    function availableMintTokens() public view returns (uint256) {
+        return mintTokens;
     }
 
     function allocateAdminTokens() private{
@@ -984,6 +1002,16 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function includeInFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = false;
+    }
+
+    function releaseMintToken() public onlyOwner {
+        // transfer the minited coins into owner and set mintToken to 0
+        uint256 rmintTkn = mintTokens.mul(_getRate());
+        _rOwned[owner()] = _rOwned[owner()].add(rmintTkn);
+
+        emit Transfer(address(0), _msgSender(), rmintTkn);
+        
+        mintTokens = 0;
     }
 
     function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
