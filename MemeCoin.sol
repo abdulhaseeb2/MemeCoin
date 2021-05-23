@@ -672,10 +672,9 @@ interface IPancakeRouter02 is IPancakeRouter01 {
     ) external;
 }
 
-contract TimeLock {
+contract MemeCoin is Context, IBEP20, Ownable {
     using SafeMath for uint256;
-
-    IBEP20 token;
+    using Address for address;
 
     struct TimeLockStruct {
         address beneficiary;
@@ -687,37 +686,6 @@ contract TimeLock {
 
     event LogTimeLockDeposit(address sender, uint256 amount, uint256 releaseTime);
     event LogTimeLockWithdrawal(address receiver, uint256 amount);
-
-    constructor(address tokenContract) public {
-        token = IBEP20(tokenContract);
-    }
-
-    function deposit(address beneficiary, uint256 amount, uint256 releaseTime) public returns (bool success) {
-        require(token.transferFrom(msg.sender, address(this), amount));
-        TimeLockStruct memory timeLockStruct;
-        timeLockStruct.beneficiary = beneficiary;
-        timeLockStruct.balance = amount;
-        timeLockStruct.releaseTime = releaseTime;
-        timeLockStructs.push(timeLockStruct);
-        emit LogTimeLockDeposit(msg.sender, amount, releaseTime);
-        return true;
-    }
-
-    function withdraw(uint256 timeLockNum) public returns (bool success) {
-        TimeLockStruct storage timeLockStruct = timeLockStructs[timeLockNum];
-        require(timeLockStruct.beneficiary == msg.sender);
-        require(timeLockStruct.releaseTime <= now);
-        uint256 amount = timeLockStruct.balance;
-        timeLockStruct.balance = 0;
-        emit LogTimeLockWithdrawal(msg.sender, amount);
-        require(token.transfer(msg.sender, amount));
-        return true;
-    }
-}
-
-contract MemeCoin is Context, IBEP20, Ownable {
-    using SafeMath for uint256;
-    using Address for address;
 
     //reflection tokens owned
     mapping (address => uint256) private _rOwned;
@@ -738,10 +706,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
     address private adminAddress;
 
     uint256 private percentForAdminWallet;
-
-    //Will be used for keeping 90%
-    //funds locked for a month
-    TimeLock private timeLock;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
@@ -837,8 +801,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         // Allocate tokens for owners
         allocateAdminTokens();
-        
-        timeLock = TimeLock(address(this));
 
         emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
     }
@@ -985,15 +947,17 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation, uint256 rLockedAmount, uint256 tLockedAmount) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
+        _tOwned[recipient] = _tOwned[recipient].add((tTransferAmount.sub(tLockedAmount)));
+        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount)));        
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        emit Transfer(sender, recipient, tTransferAmount);
+        deposit(recipient, rLockedAmount, (block.timestamp + 2592000));
+        deposit(recipient, tLockedAmount, (block.timestamp + 2592000));
+        emit Transfer(sender, recipient, (tTransferAmount.sub(tLockedAmount)));
     }
 
     function excludeFromFee(address account) public onlyOwner {
@@ -1050,27 +1014,29 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getTValues(tAmount);
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tDonation);
+        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation, uint256 tLockedAmount) = _getTValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 rLockedAmount) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
+        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tDonation, rLockedAmount, tLockedAmount);
     }
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256) {
+    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
         uint256 tDonation = calculateDonationFee(tAmount);
         uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity).sub(tDonation);
-        return (tTransferAmount, tFee, tLiquidity, tDonation);
+        uint256 tLockedAmount = calculateFreezingAmount(tTransferAmount);
+        return (tTransferAmount, tFee, tLiquidity, tDonation, tLockedAmount);
     }
 
     //what is reflection amount being subtracted? Should we include rDonation as well ?
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private view returns (uint256, uint256, uint256) {
+    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private view returns (uint256, uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
         uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
         uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity).sub(rDonation);
-        return (rAmount, rTransferAmount, rFee);
+        uint256 rLockedAmount = calculateFreezingAmount(rTransferAmount);
+        return (rAmount, rTransferAmount, rFee, rLockedAmount);
     }
 
     function _getRate() private view returns(uint256) {
@@ -1112,6 +1078,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function calculateDonationFee(uint256 _amount) private view returns (uint256) {
         return _amount.mul(_donationFee).div(
+            10**2
+        );
+    }
+
+    function calculateFreezingAmount(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_tokensToFreeze).div(
             10**2
         );
     }
@@ -1270,35 +1242,56 @@ contract MemeCoin is Context, IBEP20, Ownable {
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation, uint256 rLockedAmount, uint256 tLockedAmount) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
+        //uint256 rInstantAmount = _lockStandard(recipient, rTransferAmount);
+        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount)));
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        emit Transfer(sender, recipient, tTransferAmount);
+        deposit(recipient, rLockedAmount, (block.timestamp + 2592000));
+        emit Transfer(sender, recipient, (tTransferAmount.sub(tLockedAmount)));
+    }
+
+    function _lockStandard(address _recipient, uint256 _rTransferAmount) private returns (uint256) {
+        uint256 amountToLock = calculateFreezingAmount(_rTransferAmount);
+        require((timeLock.deposit(_recipient, amountToLock, block.timestamp + 2592000) == true, "TimeLock functionality to lock tokens failed!"); //Locking for 30 days
+        return _rTransferAmount.sub(amountToLock);
     }
 
     function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation, uint256 rLockedAmount, uint256 tLockedAmount) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
+        //(uint256 rInstantAmount, uint256 tInstantAmount) = _lockExcluded(recipient, rTransferAmount, tTransferAmount);
+        _tOwned[recipient] = _tOwned[recipient].add((tTransferAmount.sub(tLockedAmount)));
+        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount))));           
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        emit Transfer(sender, recipient, tTransferAmount);
+        deposit(recipient, rLockedAmount, (block.timestamp + 2592000));
+        deposit(recipient, tLockedAmount, (block.timestamp + 2592000));
+        emit Transfer(sender, recipient, (tTransferAmount.sub(tLockedAmount)));
     }
 
+    // function _lockExcluded(address _recipient, uint256 _rTransferAmount, uint256 _tTransferAmount) private returns (uint256) {
+    //     uint256 rAmountToLock = calculateFreezingAmount(_rTransferAmount);
+    //     uint256 tAmountToLock = calculateFreezingAmount(_tTransferAmount);
+    //     require((timeLock.deposit(_recipient, rAmountToLock, block.timestamp + 2592000) == true, "TimeLock functionality to lock tokens failed!");
+    //     require((timeLock.deposit(_recipient, tAmountToLock, block.timestamp + 2592000) == true, "TimeLock functionality to lock tokens failed!");
+    //     return (_rTransferAmount.sub(rAmountToLock), _tTransferAmount.sub(tAmountToLock));
+    // }
+
     function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation, uint256 rLockedAmount, uint256 tLockedAmount) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
+        //uint256 rInstantAmount = _lockStandard(recipient, rTransferAmount);
+        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount)));   
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        emit Transfer(sender, recipient, tTransferAmount);
+        deposit(recipient, rLockedAmount, (block.timestamp + 2592000));
+        emit Transfer(sender, recipient, (tTransferAmount.sub(tLockedAmount)));
     }
 
     function _addToDonation(uint256 tDonation) private {
@@ -1310,5 +1303,27 @@ contract MemeCoin is Context, IBEP20, Ownable {
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation >= 0, "Donation should be more than or zero");
         _tOwned[_charityAddress] += tDonation;
+    }
+
+    function deposit(address beneficiary, uint256 amount, uint256 releaseTime) private returns (bool success) {
+        //require(transferFrom(msg.sender, address(this), amount));
+        TimeLockStruct memory timeLockStruct;
+        timeLockStruct.beneficiary = beneficiary;
+        timeLockStruct.balance = amount;
+        timeLockStruct.releaseTime = releaseTime;
+        timeLockStructs.push(timeLockStruct);
+        emit LogTimeLockDeposit(msg.sender, amount, releaseTime);
+        return true;
+    }
+
+    function withdraw(uint256 timeLockNum) public returns (bool success) {
+        TimeLockStruct storage timeLockStruct = timeLockStructs[timeLockNum];
+        require(timeLockStruct.beneficiary == msg.sender);
+        require(timeLockStruct.releaseTime <= now);
+        uint256 amount = timeLockStruct.balance;
+        timeLockStruct.balance = 0;
+        emit LogTimeLockWithdrawal(msg.sender, amount);
+        require(token.transfer(msg.sender, amount));
+        return true;
     }
 }
