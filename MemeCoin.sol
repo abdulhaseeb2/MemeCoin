@@ -1255,7 +1255,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function _lockStandard(address _recipient, uint256 _rTransferAmount) private returns (uint256) {
         uint256 amountToLock = calculateFreezingAmount(_rTransferAmount);
-        require(timeLock.deposit(_recipient, amountToLock, block.timestamp + 2592000) == true, "TimeLock functionality to lock tokens failed!"); //Locking for 30 days
+        require((timeLock.deposit(_recipient, amountToLock, block.timestamp + 2592000) == true, "TimeLock functionality to lock tokens failed!"); //Locking for 30 days
         return _rTransferAmount.sub(amountToLock);
     }
 
@@ -1264,7 +1264,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         //(uint256 rInstantAmount, uint256 tInstantAmount) = _lockExcluded(recipient, rTransferAmount, tTransferAmount);
         _tOwned[recipient] = _tOwned[recipient].add((tTransferAmount.sub(tLockedAmount)));
-        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount)));           
+        _rOwned[recipient] = _rOwned[recipient].add((rTransferAmount.sub(rLockedAmount))));           
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
