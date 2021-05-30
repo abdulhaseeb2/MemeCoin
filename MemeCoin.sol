@@ -758,6 +758,9 @@ contract MemeCoin is Context, IBEP20, Ownable {
         uint256 tokensIntoLiqudity
     );
 
+    event LogTimeLockDeposit(uint256 amount, uint256 releaseTime);
+    event LogTimeLockWithdrawal(address receiver, uint256 amount);
+
     modifier lockTheSwap {
         inSwapAndLiquify = true;
         _;
@@ -1011,6 +1014,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         lockedTokens[relTime] = tokenlock;
         releaseTime.push(relTime);
+
+        emit LogTimeLockDeposit(amount, relTime);
         
         return true;
     }
@@ -1029,15 +1034,17 @@ contract MemeCoin is Context, IBEP20, Ownable {
             // add functionality for division and transfer tokens(just try simple multiplication and see what happens)
             for (uint j = 0; j < tokenlock.accounts.length; j++) {
                 // add tokens to reward list
-                addressReward[tokenlock.accounts[i]] = addressReward[tokenlock.accounts[i]].add(reward);
+                addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].add(reward);
 
                 // check for integer value is grater than 0
-                uint256 addressRewardTokens = addressReward[tokenlock.accounts[i]].div(10**decimal);
+                uint256 addressRewardTokens = addressReward[tokenlock.accounts[j]].div(10**decimal);
                 if (addressRewardTokens > 0){
                      // add tokens to r_owned 
-                    _rOwned[tokenlock.accounts[i]] = _rOwned[tokenlock.accounts[i]].add(addressRewardTokens.mul(_getRate()));
+                    _rOwned[tokenlock.accounts[j]] = _rOwned[tokenlock.accounts[j]].add(addressRewardTokens.mul(_getRate()));
                     // update addressReward
-                    addressReward[tokenlock.accounts[i]] = addressReward[tokenlock.accounts[i]].sub(addressRewardTokens.mul(10**decimal));
+                    addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].sub(addressRewardTokens.mul(10**decimal));
+
+                    emit LogTimeLockWithdrawal(tokenlock.accounts[j], addressRewardTokens);
                 }
             }
             
