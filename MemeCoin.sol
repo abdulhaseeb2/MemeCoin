@@ -672,49 +672,6 @@ interface IPancakeRouter02 is IPancakeRouter01 {
     ) external;
 }
 
-contract TimeLock {
-    using SafeMath for uint256;
-
-    IBEP20 token;
-
-    struct TimeLockStruct {
-        address beneficiary;
-        uint256 balance;
-        uint256 releaseTime;
-    }
-
-    TimeLockStruct[] public timeLockStructs;
-
-    event LogTimeLockDeposit(address sender, uint256 amount, uint256 releaseTime);
-    event LogTimeLockWithdrawal(address receiver, uint256 amount);
-
-    constructor(address tokenContract) public {
-        token = IBEP20(tokenContract);
-    }
-
-    function deposit(address beneficiary, uint256 amount, uint256 releaseTime) public returns (bool success) {
-        require(token.transferFrom(msg.sender, address(this), amount));
-        TimeLockStruct memory timeLockStruct;
-        timeLockStruct.beneficiary = beneficiary;
-        timeLockStruct.balance = amount;
-        timeLockStruct.releaseTime = releaseTime;
-        timeLockStructs.push(timeLockStruct);
-        emit LogTimeLockDeposit(msg.sender, amount, releaseTime);
-        return true;
-    }
-
-    function withdraw(uint256 timeLockNum) public returns (bool success) {
-        TimeLockStruct storage timeLockStruct = timeLockStructs[timeLockNum];
-        require(timeLockStruct.beneficiary == msg.sender);
-        require(timeLockStruct.releaseTime <= now);
-        uint256 amount = timeLockStruct.balance;
-        timeLockStruct.balance = 0;
-        emit LogTimeLockWithdrawal(msg.sender, amount);
-        require(token.transfer(msg.sender, amount));
-        return true;
-    }
-}
-
 contract MemeCoin is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
@@ -739,9 +696,20 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     uint256 private percentForAdminWallet;
 
-    //Will be used for keeping 90%
-    //funds locked for a month
-    TimeLock private timeLock;
+    struct TokenLock {
+        address []accounts;
+        uint256 balance;
+    }
+
+    mapping (uint256 => TokenLock) private lockedTokens;
+
+    address[] private accounts;
+    uint256[] private releaseTime;
+    mapping (address => uint256) private addressReward;
+    
+    address[] private rewardAccounts;
+    uint256[] private releaseTimeList;
+    uint256[] private newReleaseTime;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
@@ -756,6 +724,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
     string private _name = "MemeCoin";
     string private _symbol = "MEMECOIN";
     uint8 private _decimals = 9;
+    uint256 private decimal = 9;
 
     uint256 public _taxFee = 5;
     uint256 private _previousTaxFee = _taxFee;
@@ -802,7 +771,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
         adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
         percentForAdminWallet = 20; //currently 20% but might need to be changed
         
-
+        // initialize accounts
+        accounts.push(_msgSender());
 
         //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
         IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
@@ -837,8 +807,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
         // Allocate tokens for owners
         allocateAdminTokens();
-        
-        timeLock = TimeLock(address(this));
 
         emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
     }
@@ -859,6 +827,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
         );
         
          _tokenTransfer(_msgSender(), adminAddress, _amountTokens, false);
+    }
+
+    function withdrawLockedTokens() public {
+        lockTokenWithdraw(block.timestamp);
     }
 
     function getOwner() external view override returns (address) {
@@ -1003,6 +975,76 @@ contract MemeCoin is Context, IBEP20, Ownable {
     function includeInFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = false;
     }
+    
+    function getRewardableAddressList() private {
+        delete rewardAccounts;
+
+        for (uint i=0; i<accounts.length ;i++){
+            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
+                rewardAccounts.push(accounts[i]);
+            }
+        }
+    }
+
+    function updateReleaseTime(uint256 relTime) private{
+        delete releaseTimeList;
+
+        for (uint i=0; i<releaseTime.length ;i++){
+            if(releaseTime[i] <= relTime){
+                releaseTimeList.push(releaseTime[i]);
+            }
+            else {
+                newReleaseTime.push(releaseTime[i]);
+            }
+        }
+
+        delete releaseTime;
+        releaseTime = newReleaseTime;
+    }
+
+    function lockTokenDeposit(uint256 amount, uint256 relTime) private returns (bool success) {
+        getRewardableAddressList();
+
+        TokenLock memory tokenlock;
+        tokenlock.balance = amount;
+        tokenlock.accounts = rewardAccounts;
+
+        lockedTokens[relTime] = tokenlock;
+        releaseTime.push(relTime);
+        
+        return true;
+    }
+
+    function lockTokenWithdraw(uint256 timeLockNum) private {
+        updateReleaseTime(timeLockNum);
+        for (uint i=0 ; i < releaseTimeList.length ; i++){
+            TokenLock memory tokenlock = lockedTokens[releaseTimeList[i]];
+
+            uint256 reward = 0;
+            if (tokenlock.accounts.length != 0){
+                //calculate reward of each user
+                reward = tokenlock.balance.div(tokenlock.accounts.length);
+            }
+
+            // add functionality for division and transfer tokens(just try simple multiplication and see what happens)
+            for (uint j = 0; j < tokenlock.accounts.length; j++) {
+                // add tokens to reward list
+                addressReward[tokenlock.accounts[i]] = addressReward[tokenlock.accounts[i]].add(reward);
+
+                // check for integer value is grater than 0
+                uint256 addressRewardTokens = addressReward[tokenlock.accounts[i]].div(10**decimal);
+                if (addressRewardTokens > 0){
+                     // add tokens to r_owned 
+                    _rOwned[tokenlock.accounts[i]] = _rOwned[tokenlock.accounts[i]].add(addressRewardTokens.mul(_getRate()));
+                    // update addressReward
+                    addressReward[tokenlock.accounts[i]] = addressReward[tokenlock.accounts[i]].sub(addressRewardTokens.mul(10**decimal));
+                }
+            }
+            
+            // delete tokenlock
+            delete lockedTokens[releaseTimeList[i]];
+        }
+    }
 
     function releaseMintToken() public onlyOwner {
         // transfer the minited coins into owner and set mintToken to 0
@@ -1059,7 +1101,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
         uint256 tDonation = calculateDonationFee(tAmount);
-        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity).sub(tDonation);
+        uint256 tTransferAmount = tAmount.sub(calculateTDeductable(tAmount));
         return (tTransferAmount, tFee, tLiquidity, tDonation);
     }
 
@@ -1069,8 +1111,12 @@ contract MemeCoin is Context, IBEP20, Ownable {
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
         uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity).sub(rDonation);
+        uint256 rTransferAmount = rAmount.sub(calculateTDeductable(tAmount).mul(currentRate));
         return (rAmount, rTransferAmount, rFee);
+    }
+
+    function calculateTDeductable(uint256 tAmount) private view returns(uint256){
+        return ((_taxFee.add(_liquidityFee).add(_donationFee)).mul(tAmount)).div(100);
     }
 
     function _getRate() private view returns(uint256) {
@@ -1187,9 +1233,33 @@ contract MemeCoin is Context, IBEP20, Ownable {
         if(_isExcludedFromFee[from] || _isExcludedFromFee[to]){
             takeFee = false;
         }
+
+        // add addresses to account if they dont exist
+        if (from != address(0)){
+            if (!_isExcluded[from]){
+                addAccount(from);
+            }
+        }
+
+        if (to != address(0)){
+            if (!_isExcluded[to]){
+                addAccount(to);
+            }
+        }
         
         //transfer amount, it will take tax, burn, liquidity fee
         _tokenTransfer(from,to,amount,takeFee);
+        //check if tokens can be withdrawn
+        withdrawLockedTokens();
+    }
+
+    function addAccount(address addr) private returns (bool) {
+        for (uint i=0; i<accounts.length ;i++){
+            if (accounts[i] == addr){
+                return false;
+            }
+        }
+        accounts.push(addr);
     }
 
     function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
@@ -1269,6 +1339,15 @@ contract MemeCoin is Context, IBEP20, Ownable {
             restoreAllFee();
     }
 
+    function takeFee(uint256 tAmount) private {
+        uint256 taxfee = (tAmount.mul(10**decimal)).mul(_taxFee).div(
+            10**2
+        );
+
+        //lockTokenDeposit(taxfee, block.timestamp + 2592000);
+        lockTokenDeposit(taxfee, block.timestamp + 60);
+    }
+
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
@@ -1276,6 +1355,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
+        takeFee(tAmount);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
@@ -1287,6 +1367,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         _addToDonation(tDonation);
+        takeFee(tAmount);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
