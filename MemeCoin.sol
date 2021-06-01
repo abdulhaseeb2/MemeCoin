@@ -1,7 +1,7 @@
 pragma solidity ^0.6.12;
 // SPDX-License-Identifier: Unlicensed
 
-interface IBEP20 {
+interface IERC20 {
     /**
      * @dev Returns the amount of tokens in existence.
      */
@@ -21,11 +21,6 @@ interface IBEP20 {
      * @dev Returns the token name.
      */
     function name() external view returns (string memory);
-
-    /**
-     * @dev Returns the bep token owner.
-     */
-    function getOwner() external view returns (address);
 
     /**
      * @dev Returns the amount of tokens owned by `account`.
@@ -468,7 +463,7 @@ contract Ownable is Context {
     }
 }
 
-interface IPancakeFactory {
+interface IUniswapFactoryV2 {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
     function feeTo() external view returns (address);
@@ -484,7 +479,7 @@ interface IPancakeFactory {
     function setFeeToSetter(address) external;
 }
 
-interface IPancakePair {
+interface IUniswapV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
@@ -537,7 +532,7 @@ interface IPancakePair {
 
 //pragma solidity >=0.6.2;
 
-interface IPancakeRouter01 {
+interface IUniswapV2Router01  {
     function factory() external pure returns (address);
     function WETH() external pure returns (address);
 
@@ -631,7 +626,7 @@ interface IPancakeRouter01 {
     function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
-interface IPancakeRouter02 is IPancakeRouter01 {
+interface IUniswapV2Router02 is IUniswapV2Router01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
         uint liquidity,
@@ -672,7 +667,7 @@ interface IPancakeRouter02 is IPancakeRouter01 {
     ) external;
 }
 
-contract MemeCoin is Context, IBEP20, Ownable {
+contract MemeCoin is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
@@ -738,8 +733,8 @@ contract MemeCoin is Context, IBEP20, Ownable {
     uint256 public _tokensToFreeze = 90;
     uint256 private _previousTokensToFreeze = _tokensToFreeze;
 
-    IPancakeRouter02 public immutable pancakeRouter;
-    address public immutable pancakePair;
+    IUniswapV2Router02 public immutable uniswapV2Router;
+    address public immutable uniswapV2Pair;
 
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
@@ -777,20 +772,15 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // initialize accounts
         accounts.push(_msgSender());
 
-        //TODO: Replace the testnet address below with 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F
-        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
+        //Below address is of the Ropsten Testnet Network
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
-        //Create a Pancakeswap Pair for this new token
-        //TODO: Replace the router address below with _pancake.factory()
-        pancakePair = IPancakeFactory(_pancakeRouter.factory())
-            .createPair(address(this), _pancakeRouter.WETH());
-
-        //IPancakeFactory pancakeFac = IPancakeFactory(0x6725F303b657a9451d8BA641348b6761A6CC7a17);
-
-        //address _pancakePair = pancakeFac.createPair(address(this), pancakeRouter.WETH());
+        //Create a Unis2wap Pair for this new token
+        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
+            .createPair(address(this), _uniswapV2Router.WETH());;
 
         // set the rest of the contract variables
-        pancakeRouter = _pancakeRouter;
+        uniswapV2Router = _uniswapV2Router;
 
         //currently the address is 0
         //but will need to be changed
@@ -834,10 +824,6 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function withdrawLockedTokens() public {
         lockTokenWithdraw(block.timestamp);
-    }
-
-    function getOwner() external view override returns (address) {
-        return owner();
     }
 
     function name() public view override returns (string memory) {
@@ -1090,7 +1076,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
 
-    //to recieve ETH from pancakeswapRouter when swaping
+    //to recieve ETH from uniswapV2Router when swaping
     receive() external payable {}
 
     function _reflectFee(uint256 rFee, uint256 tFee) private {
@@ -1213,7 +1199,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // is the token balance of this contract address over the min number of
         // tokens that we need to initiate a swap + liquidity lock?
         // also, don't get caught in a circular liquidity event.
-        // also, don't swap & liquify if sender is pancakeswap pair.
+        // also, don't swap & liquify if sender is uniswap pair.
         uint256 contractTokenBalance = balanceOf(address(this));
         
         if(contractTokenBalance >= _maxTxAmount)
@@ -1225,7 +1211,7 @@ contract MemeCoin is Context, IBEP20, Ownable {
         if (
             overMinTokenBalance &&
             !inSwapAndLiquify &&
-            from != pancakePair &&
+            from != uniswapV2Pair &&
             swapAndLiquifyEnabled
         ) {
             contractTokenBalance = numTokensSellToAddToLiquidity;
@@ -1286,22 +1272,22 @@ contract MemeCoin is Context, IBEP20, Ownable {
         // how much ETH did we just swap into?
         uint256 newBalance = address(this).balance.sub(initialBalance);
 
-        // add liquidity to pancakeswap
+        // add liquidity to uniswap
         addLiquidity(otherHalf, newBalance);
         
         emit SwapAndLiquify(half, newBalance, otherHalf);
     }
 
     function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the pancakeswap pair path of token -> weth
+        // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
-        path[1] = pancakeRouter.WETH();
+        path[1] = uniswapV2Router.WETH();
 
-        _approve(address(this), address(pancakeRouter), tokenAmount);
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
 
         // make the swap
-        pancakeRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
             0, // accept any amount of ETH
             path,
@@ -1312,10 +1298,10 @@ contract MemeCoin is Context, IBEP20, Ownable {
 
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         // approve token transfer to cover all possible scenarios
-        _approve(address(this), address(pancakeRouter), tokenAmount);
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
 
         // add the liquidity
-        pancakeRouter.addLiquidityETH{value: ethAmount}(
+        uniswapV2Router.addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
