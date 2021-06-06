@@ -701,10 +701,6 @@ contract MemeCoin is Context, IERC20, Ownable {
     address[] private accounts;
     uint256[] private releaseTime;
     mapping (address => uint256) private addressReward;
-    
-    address[] private rewardAccounts;
-    uint256[] private releaseTimeList;
-    uint256[] private newReleaseTime;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
@@ -965,34 +961,66 @@ contract MemeCoin is Context, IERC20, Ownable {
         _isExcludedFromFee[account] = false;
     }
     
-    function getRewardableAddressList() private {
-        delete rewardAccounts;
-
-        for (uint i=0; i<accounts.length ;i++){
+    function getRewardableAddressList() private view returns(address[] memory){
+        uint256 len = 0;
+        
+        for (uint i = 0; i < accounts.length ; i++){
             if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
-                rewardAccounts.push(accounts[i]);
+               len++;
             }
         }
+        
+        address[] memory rewardAccounts = new address[](len);
+
+        uint256 j = 0;
+        for (uint i = 0; i < accounts.length ; i++){
+            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
+                rewardAccounts[j] = accounts[i];
+                j++;
+            }
+        }
+        
+        return rewardAccounts;
     }
 
-    function updateReleaseTime(uint256 relTime) private{
-        delete releaseTimeList;
+    function updateReleaseTime(uint256 relTime) private returns(uint256[] memory){
+        uint256 lenNewReleaseTime = 0;
+        uint256 lenReleaseTimeList = 0;
+        
+        for (uint i=0; i<releaseTime.length ;i++){
+            if(releaseTime[i] <= relTime){
+               lenReleaseTimeList++;
+            }
+            else {
+               lenNewReleaseTime++;
+            }
+        }
+        
+        uint256[] memory newReleaseTime = new uint256[](lenNewReleaseTime);
+        uint256 j = 0;
+        
+        uint256[] memory releaseTimeList = new uint256[](lenReleaseTimeList);
+        uint256 k = 0;
 
         for (uint i=0; i<releaseTime.length ;i++){
             if(releaseTime[i] <= relTime){
-                releaseTimeList.push(releaseTime[i]);
+                releaseTimeList[k] = releaseTime[i];
+                k++;
             }
             else {
-                newReleaseTime.push(releaseTime[i]);
+                newReleaseTime[j] = releaseTime[i];
+                j++;
             }
         }
 
         delete releaseTime;
         releaseTime = newReleaseTime;
+        
+        return releaseTimeList;
     }
 
     function lockTokenDeposit(uint256 amount, uint256 relTime) private returns (bool success) {
-        getRewardableAddressList();
+        address[] memory rewardAccounts = getRewardableAddressList();
 
         TokenLock memory tokenlock;
         tokenlock.balance = amount;
@@ -1007,7 +1035,7 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function lockTokenWithdraw(uint256 timeLockNum) private {
-        updateReleaseTime(timeLockNum);
+        uint256[] memory releaseTimeList = updateReleaseTime(timeLockNum);
         for (uint i=0 ; i < releaseTimeList.length ; i++){
             TokenLock memory tokenlock = lockedTokens[releaseTimeList[i]];
 
