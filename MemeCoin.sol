@@ -776,8 +776,8 @@ contract MemeCoin is Context, IERC20, Ownable {
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
         //Create a Unis2wap Pair for this new token
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-            .createPair(address(this), _uniswapV2Router.WETH());;
+        uniswapV2Pair = IUniswapFactoryV2(_uniswapV2Router.factory())
+            .createPair(address(this), _uniswapV2Router.WETH());
 
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
@@ -1104,6 +1104,8 @@ contract MemeCoin is Context, IERC20, Ownable {
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
         uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
+        rLiquidity = 0;// to remove unused var warning
+        rDonation = 0;
         uint256 rTransferAmount = rAmount.sub(calculateTDeductable(tAmount).mul(currentRate));
         return (rAmount, rTransferAmount, rFee);
     }
