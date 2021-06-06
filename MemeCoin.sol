@@ -717,7 +717,7 @@ contract MemeCoin is Context, IERC20, Ownable {
     uint8 private _decimals = 9;
     uint256 private decimal = 9;
 
-    uint256 public _taxFee = 5;
+    uint256 public _taxFee = 1;
     uint256 private _previousTaxFee = _taxFee;
     
     uint256 public _liquidityFee = 0;
