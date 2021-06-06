@@ -720,7 +720,7 @@ contract MemeCoin is Context, IERC20, Ownable {
     uint256 public _taxFee = 5;
     uint256 private _previousTaxFee = _taxFee;
     
-    uint256 public _liquidityFee = 1;
+    uint256 public _liquidityFee = 0;
     uint256 private _previousLiquidityFee = _liquidityFee;
 
     uint256 public _donationFee = 5;
@@ -1367,8 +1367,7 @@ contract MemeCoin is Context, IERC20, Ownable {
             10**2
         );
 
-        //lockTokenDeposit(taxfee, block.timestamp + 2592000);
-        lockTokenDeposit(taxfee, block.timestamp + 60);
+        lockTokenDeposit(taxfee, block.timestamp + 2592000);
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
