@@ -863,7 +863,7 @@ contract MemeCoin is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
 
@@ -965,7 +965,7 @@ contract MemeCoin is Context, IERC20, Ownable {
         uint256 len = 0;
         
         for (uint i = 0; i < accounts.length ; i++){
-            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
+            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0 && (accounts[i] != owner())){
                len++;
             }
         }
@@ -974,7 +974,7 @@ contract MemeCoin is Context, IERC20, Ownable {
 
         uint256 j = 0;
         for (uint i = 0; i < accounts.length ; i++){
-            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
+            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0 && (accounts[i] != owner())){
                 rewardAccounts[j] = accounts[i];
                 j++;
             }
@@ -1034,21 +1034,75 @@ contract MemeCoin is Context, IERC20, Ownable {
         return true;
     }
 
+    // function calculateRewardsForHolders(address[] memory _accounts, uint256 _totalBalance) private {
+
+    //     //Capture total balance of the users currently
+    //     uint256 currentTotalBalance = 0;
+    //     for (uint i = 0; i < _accounts.length; i++) {
+    //         currentTotalBalance += balanceOf(_accounts[i]);
+    //     }
+
+    //     //What do we do about the tokens left?
+    //     address highestBalanceAdd;
+    //     uint256 highestReward = 0;
+    //     uint256 leftBalance = currentTotalBalance;
+    //     for (uint i = 0; i < _accounts.length; i++) {
+    //         uint256 reward = (balanceOf(_accounts[i]).mul(10**2)).div(currentTotalBalance);
+    //         reward = reward.mul(_totalBalance).div(10**2);
+    //         if (reward > highestReward)
+    //         {
+    //             highestBalanceAdd = _accounts[i];
+    //             highestReward = reward;
+    //         }
+    //         addressReward[_accounts[i]] = addressReward[_accounts[i]].add(reward);
+    //         leftBalance -= reward;
+    //     }
+
+    //     if (leftBalance > 0)
+    //     {
+    //         addressReward[highestBalanceAdd] = addressReward[highestBalanceAdd].add(leftBalance);
+    //     }
+
+    // }
+
     function lockTokenWithdraw(uint256 timeLockNum) private {
         uint256[] memory releaseTimeList = updateReleaseTime(timeLockNum);
         for (uint i=0 ; i < releaseTimeList.length ; i++){
             TokenLock memory tokenlock = lockedTokens[releaseTimeList[i]];
 
-            uint256 reward = 0;
             if (tokenlock.accounts.length != 0){
                 //calculate reward of each user
-                reward = tokenlock.balance.div(tokenlock.accounts.length);
+                //might need to add the proportional functionality here
+                //reward = tokenlock.balance.div(tokenlock.accounts.length);
+                uint256 currentTotalBalance = 0;
+                for (uint j=0; j < tokenlock.accounts.length; j++) {
+                    currentTotalBalance += balanceOf(tokenlock.accounts[j]);
+                }
+
+                address highestBalanceAdd;
+                uint256 highestReward = 0;
+                uint256 leftBalance = currentTotalBalance;
+                for (uint j=0; j< tokenlock.accounts.length; j++) {
+                    uint256 reward = (balanceOf(tokenlock.accounts[j]).mul(10**2)).div(currentTotalBalance);
+                    reward = reward.mul(tokenlock.balance).div(10**2);
+                    if (reward > highestReward) {
+                        highestBalanceAdd = tokenlock.accounts[j];
+                        highestReward = reward;
+                    }
+                    addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].add(reward);
+                    leftBalance -= reward;
+                }
+
+                if (leftBalance > 0) {
+                    addressReward[highestBalanceAdd] = addressReward[highestBalanceAdd].add(leftBalance);
+                }
+                //calculateRewardsForHolders(tokenlock.accounts, tokenlock.balance);
             }
 
             // add functionality for division and transfer tokens(just try simple multiplication and see what happens)
             for (uint j = 0; j < tokenlock.accounts.length; j++) {
                 // add tokens to reward list
-                addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].add(reward);
+                //addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].add(reward);
 
                 // check for integer value is grater than 0
                 uint256 addressRewardTokens = addressReward[tokenlock.accounts[j]].div(10**decimal);
@@ -1208,8 +1262,8 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function _approve(address owner, address spender, uint256 amount) private {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -1220,8 +1274,8 @@ contract MemeCoin is Context, IERC20, Ownable {
         address to,
         uint256 amount
     ) private {
-        require(from != address(0), "BEP20: transfer from the zero address");
-        require(to != address(0), "BEP20: transfer to the zero address");
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
@@ -1367,7 +1421,7 @@ contract MemeCoin is Context, IERC20, Ownable {
             10**2
         );
 
-        lockTokenDeposit(taxfee, block.timestamp + 2592000);
+        lockTokenDeposit(taxfee, block.timestamp + 60);
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
@@ -1405,10 +1459,6 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function _addToDonation(uint256 tDonation) private {
-        //Here we will add implementation
-        //to donate to the charity
-        //e.g
-        // charity[address] += tDonation;
 
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation >= 0, "Donation should be more than or zero");
