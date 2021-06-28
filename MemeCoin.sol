@@ -863,7 +863,7 @@ contract MemeCoin is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
 
@@ -1042,6 +1042,7 @@ contract MemeCoin is Context, IERC20, Ownable {
             uint256 reward = 0;
             if (tokenlock.accounts.length != 0){
                 //calculate reward of each user
+                //might need to add the proportional functionality here
                 reward = tokenlock.balance.div(tokenlock.accounts.length);
             }
 
@@ -1208,8 +1209,8 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function _approve(address owner, address spender, uint256 amount) private {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -1220,8 +1221,8 @@ contract MemeCoin is Context, IERC20, Ownable {
         address to,
         uint256 amount
     ) private {
-        require(from != address(0), "BEP20: transfer from the zero address");
-        require(to != address(0), "BEP20: transfer to the zero address");
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
@@ -1405,10 +1406,6 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function _addToDonation(uint256 tDonation) private {
-        //Here we will add implementation
-        //to donate to the charity
-        //e.g
-        // charity[address] += tDonation;
 
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
         require(tDonation >= 0, "Donation should be more than or zero");
