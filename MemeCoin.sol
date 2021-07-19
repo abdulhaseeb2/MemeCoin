@@ -266,7 +266,7 @@
         * `recipient`, forwarding all available gas and reverting on errors.
         *
         * https://eips.ethereum.org/EIPS/eip-1884[EIP1884] increases the gas cost
-        * of certain opcodes, possibly making contracts go over the 2300 gas limit
+        * of certain opcodes, possibly making contracts go over the 2150 gas limit
         * imposed by `transfer`, making them unable to receive funds via
         * `transfer`. {sendValue} removes this limitation.
         *
@@ -593,7 +593,7 @@
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);       
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 2592000); //2592000 is 30 days
+            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -603,7 +603,7 @@
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 2592000); //2592000 is 30 days
+            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -613,7 +613,7 @@
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 2592000); //2592000 is 30 days
+            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -624,7 +624,7 @@
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 2592000); //2592000 is 30 days
+            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -676,7 +676,7 @@
             tokenLock.rFee = _rFee;
             tokenLock.tFee = _tFee;
             
-            lockedTokens[relTime] = tokenLock;
+            lockedTokens[block.timestamp+relTime] = tokenLock;
             releaseTime.push(relTime);
             
             emit LogTimeLockDeposit(_rFee, _tFee, relTime);
@@ -723,9 +723,9 @@
             return releaseTimeList;
         }
         
-        function lockTokenWithdraw(uint256 timeLockNum) private {
+        function lockTokenWithdraw() public {
             
-            uint256[] memory releaseTimeList = updateReleaseTime(timeLockNum);
+            uint256[] memory releaseTimeList = updateReleaseTime(block.timestamp);
             
             for (uint i = 0; i < releaseTimeList.length; i++)
             {
