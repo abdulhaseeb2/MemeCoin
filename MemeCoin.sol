@@ -593,7 +593,7 @@
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);       
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -603,7 +603,7 @@
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -613,7 +613,7 @@
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -624,7 +624,7 @@
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
             _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -676,7 +676,7 @@
             tokenLock.rFee = _rFee;
             tokenLock.tFee = _tFee;
             
-            lockedTokens[block.timestamp+relTime] = tokenLock;
+            lockedTokens[relTime] = tokenLock;
             releaseTime.push(relTime);
             
             emit LogTimeLockDeposit(_rFee, _tFee, relTime);
