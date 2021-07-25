@@ -440,6 +440,10 @@
         string private _name = 'Grumpy Cat';
         string private _symbol = 'GRUMPY';
         uint8 private _decimals = 9;
+
+        //TODO: Replace with actual donation address
+        address private constant donationAddress = '0x880DBB454F58feb935cf07EAC5AECeEAf641dA4A' //Test Acc 7
+        event LogDonationFeeTransferred(uint256 tDonationFee);
         
         struct TokenLock {
             uint256 rFee;
@@ -453,6 +457,7 @@
 
         constructor () public {
             _rOwned[_msgSender()] = _rTotal;
+            _isExcluded[donationAddress] = true;
             emit Transfer(address(0), _msgSender(), _tTotal);
         }
 
@@ -589,42 +594,46 @@
         }
 
         function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tDonationFee) = _getValues(tAmount);
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
-            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);       
+            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
+            DonateFee(tDonationFee);       
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
         function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tDonationFee) = _getValues(tAmount);
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
+            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
+            DonateFee(tDonationFee);
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
         function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tDonationFee) = _getValues(tAmount);
             _tOwned[sender] = _tOwned[sender].sub(tAmount);
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
-            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
+            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
+            DonateFee(tDonationFee);
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
         function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+            (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tDonationFee) = _getValues(tAmount);
             _tOwned[sender] = _tOwned[sender].sub(tAmount);
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
+            _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
+            DonateFee(tDonationFee);
             //_reflectFee(rFee, tFee);
-            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //150 is 30 days
+            lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
             emit Transfer(sender, recipient, tTransferAmount);
         }
 
@@ -633,17 +642,18 @@
             _tFeeTotal = _tFeeTotal.add(tFee);
         }
 
-        function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
-            (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount);
+        function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
+            (uint256 tTransferAmount, uint256 tFee, uint256 tDonationFee) = _getTValues(tAmount);
             uint256 currentRate =  _getRate();
             (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, currentRate);
-            return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee);
+            return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tDonationFee);
         }
 
-        function _getTValues(uint256 tAmount) private pure returns (uint256, uint256) {
-            uint256 tFee = tAmount.div(100);
-            uint256 tTransferAmount = tAmount.sub(tFee);
-            return (tTransferAmount, tFee);
+        function _getTValues(uint256 tAmount) private pure returns (uint256, uint256, uint256) {
+            uint256 tFee = (tAmount.mul(5)).div(100);
+            uint256 donationFee = (tAmount.mul(5)).div(100);
+            uint256 tTransferAmount = tAmount.sub(tFee).sub(donationFee);
+            return (tTransferAmount, tFee, donationFee);
         }
 
         function _getRValues(uint256 tAmount, uint256 tFee, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
@@ -738,4 +748,10 @@
             }
             
         }
+
+        function DonateFee(uint256 _tDonationFee) private {
+            _tOwned[donationAddress] = _tOwned[donationAddress].add(_tDonationFee);
+            emit LogDonationFeeTransferred(_tDonationFee);
+        }
     }
+    
