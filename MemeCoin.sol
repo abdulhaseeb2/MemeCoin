@@ -686,21 +686,19 @@ contract MemeCoin is Context, IERC20, Ownable {
     address[] private _excluded;
 
     address private _charityAddress;
+    event LogDonationFeeTransferred(uint256 tDonationFee);
 
-    address private adminAddress;
+    //address private adminAddress;
 
-    uint256 private percentForAdminWallet;
+    //uint256 private percentForAdminWallet;
 
     struct TokenLock {
-        address []accounts;
-        uint256 balance;
+        uint256 rFee;
+        uint256 tFee;
     }
 
     mapping (uint256 => TokenLock) private lockedTokens;
-
-    address[] private accounts;
     uint256[] private releaseTime;
-    mapping (address => uint256) private addressReward;
 
     //reason for these variables still unknown
     uint256 private constant MAX = ~uint256(0);
@@ -717,7 +715,7 @@ contract MemeCoin is Context, IERC20, Ownable {
     uint8 private _decimals = 9;
     uint256 private decimal = 9;
 
-    uint256 public _taxFee = 1;
+    uint256 public _taxFee = 5;
     uint256 private _previousTaxFee = _taxFee;
     
     uint256 public _liquidityFee = 0;
@@ -749,8 +747,8 @@ contract MemeCoin is Context, IERC20, Ownable {
         uint256 tokensIntoLiqudity
     );
 
-    event LogTimeLockDeposit(uint256 amount, uint256 releaseTime);
-    event LogTimeLockWithdrawal(address receiver, uint256 amount);
+    event LogTimeLockDeposit(uint256 rFee, uint256 tFee, uint256 releaseTime);
+    event LogTimeLockWithdrawal(uint256 rFee, uint256 tFee);
 
     modifier lockTheSwap {
         inSwapAndLiquify = true;
@@ -762,11 +760,8 @@ contract MemeCoin is Context, IERC20, Ownable {
 
         _rOwned[_msgSender()] = _rTotal;
         
-        adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
-        percentForAdminWallet = 20; //currently 20% but might need to be changed
-        
-        // initialize accounts
-        accounts.push(_msgSender());
+        //adminAddress = address(0x54B1D020a3C130e4bdbB6150D477edA19569c635);
+        //percentForAdminWallet = 20; //currently 20% but might need to be changed
 
         //Below address is of the Ropsten Testnet Network
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
@@ -780,22 +775,22 @@ contract MemeCoin is Context, IERC20, Ownable {
 
         //currently the address is 0
         //but will need to be changed
-        _charityAddress = address(0x27D9490B2028616B1251701fe0c022fa283DD354);
+        _charityAddress = address(0x880DBB454F58feb935cf07EAC5AECeEAf641dA4A);
 
         //exclude owner and this contract from fee
         //TODO: Exclude PETA from fee too ?
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[_charityAddress] = true;
-        _isExcludedFromFee[adminAddress] = true;
+        //_isExcludedFromFee[_charityAddress] = true;
+        //_isExcludedFromFee[adminAddress] = true;
         _isExcluded[_charityAddress] = true;
-        _isExcluded[adminAddress] = true;
+        //_isExcluded[adminAddress] = true;
         
         // Allocate token for Minting
         allocateMintTokens();
 
         // Allocate tokens for owners
-        allocateAdminTokens();
+        //allocateAdminTokens();
 
         emit Transfer(address(0), _msgSender(), (_rOwned[_msgSender()]));
     }
@@ -810,13 +805,13 @@ contract MemeCoin is Context, IERC20, Ownable {
         return mintTokens;
     }
 
-    function allocateAdminTokens() private{
+    /*function allocateAdminTokens() private{
         uint256 _amountTokens = _tTotal.mul(percentForAdminWallet).div(
             10**2
         );
         
          _tokenTransfer(_msgSender(), adminAddress, _amountTokens, false);
-    }
+    }*/
 
     function withdrawLockedTokens() public {
         lockTokenWithdraw(block.timestamp);
@@ -885,13 +880,13 @@ contract MemeCoin is Context, IERC20, Ownable {
         return _tFeeTotal;
     }
 
-    function charityAddress() public view returns (address) {
+    /*function charityAddress() public view returns (address) {
         return _charityAddress;
     }
 
     function charityTokens() public view returns (uint256) {
         return _tOwned[_charityAddress];
-    }
+    }*/
 
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
@@ -948,8 +943,9 @@ contract MemeCoin is Context, IERC20, Ownable {
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
         _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
+        //_reflectFee(rFee, tFee);
         _addToDonation(tDonation);
+        lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
@@ -959,28 +955,6 @@ contract MemeCoin is Context, IERC20, Ownable {
 
     function includeInFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = false;
-    }
-    
-    function getRewardableAddressList() private view returns(address[] memory){
-        uint256 len = 0;
-        
-        for (uint i = 0; i < accounts.length ; i++){
-            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
-               len++;
-            }
-        }
-        
-        address[] memory rewardAccounts = new address[](len);
-
-        uint256 j = 0;
-        for (uint i = 0; i < accounts.length ; i++){
-            if(!_isExcluded[accounts[i]] && tokenFromReflection(_rOwned[accounts[i]]) != 0){
-                rewardAccounts[j] = accounts[i];
-                j++;
-            }
-        }
-        
-        return rewardAccounts;
     }
 
     function updateReleaseTime(uint256 relTime) private returns(uint256[] memory){
@@ -1019,52 +993,30 @@ contract MemeCoin is Context, IERC20, Ownable {
         return releaseTimeList;
     }
 
-    function lockTokenDeposit(uint256 amount, uint256 relTime) private returns (bool success) {
-        address[] memory rewardAccounts = getRewardableAddressList();
-
-        TokenLock memory tokenlock;
-        tokenlock.balance = amount;
-        tokenlock.accounts = rewardAccounts;
-
-        lockedTokens[relTime] = tokenlock;
+    function lockTokenDeposit(uint256 _rFee, uint256 _tFee, uint256 relTime) private returns (bool success) {
+           
+        TokenLock memory tokenLock;
+        tokenLock.rFee = _rFee;
+        tokenLock.tFee = _tFee;
+           
+        lockedTokens[relTime] = tokenLock;
         releaseTime.push(relTime);
-
-        emit LogTimeLockDeposit(amount, relTime);
-        
+           
+        emit LogTimeLockDeposit(_rFee, _tFee, relTime);
+            
         return true;
     }
 
     function lockTokenWithdraw(uint256 timeLockNum) private {
         uint256[] memory releaseTimeList = updateReleaseTime(timeLockNum);
-        for (uint i=0 ; i < releaseTimeList.length ; i++){
-            TokenLock memory tokenlock = lockedTokens[releaseTimeList[i]];
-
-            uint256 reward = 0;
-            if (tokenlock.accounts.length != 0){
-                //calculate reward of each user
-                //might need to add the proportional functionality here
-                reward = tokenlock.balance.div(tokenlock.accounts.length);
-            }
-
-            // add functionality for division and transfer tokens(just try simple multiplication and see what happens)
-            for (uint j = 0; j < tokenlock.accounts.length; j++) {
-                // add tokens to reward list
-                addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].add(reward);
-
-                // check for integer value is grater than 0
-                uint256 addressRewardTokens = addressReward[tokenlock.accounts[j]].div(10**decimal);
-                if (addressRewardTokens > 0){
-                     // add tokens to r_owned 
-                    _rOwned[tokenlock.accounts[j]] = _rOwned[tokenlock.accounts[j]].add(addressRewardTokens.mul(_getRate()));
-                    // update addressReward
-                    addressReward[tokenlock.accounts[j]] = addressReward[tokenlock.accounts[j]].sub(addressRewardTokens.mul(10**decimal));
-
-                    emit LogTimeLockWithdrawal(tokenlock.accounts[j], addressRewardTokens);
-                }
-            }
-            
-            // delete tokenlock
-            delete lockedTokens[releaseTimeList[i]];
+        for (uint i = 0; i < releaseTimeList.length; i++)
+        {
+            TokenLock memory tokenLock = lockedTokens[releaseTimeList[i]];
+                
+            _reflectFee(tokenLock.rFee, tokenLock.tFee);
+              
+            emit LogTimeLockWithdrawal(tokenLock.rFee, tokenLock.tFee);
+               
         }
     }
 
@@ -1114,9 +1066,9 @@ contract MemeCoin is Context, IERC20, Ownable {
     }
 
     function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getTValues(tAmount);
+        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonationFee) = _getTValues(tAmount);
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tDonation);
+        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity, tDonationFee);
     }
 
     function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256) {
@@ -1132,9 +1084,9 @@ contract MemeCoin is Context, IERC20, Ownable {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
-        uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
+        //uint256 rDonation = calculateDonationFee(tAmount).mul(currentRate);
         rLiquidity = 0;// to remove unused var warning
-        rDonation = 0;
+        //rDonation = 0;
         uint256 rTransferAmount = rAmount.sub(calculateTDeductable(tAmount).mul(currentRate));
         return (rAmount, rTransferAmount, rFee);
     }
@@ -1257,33 +1209,11 @@ contract MemeCoin is Context, IERC20, Ownable {
         if(_isExcludedFromFee[from] || _isExcludedFromFee[to]){
             takeFee = false;
         }
-
-        // add addresses to account if they dont exist
-        if (from != address(0)){
-            if (!_isExcluded[from]){
-                addAccount(from);
-            }
-        }
-
-        if (to != address(0)){
-            if (!_isExcluded[to]){
-                addAccount(to);
-            }
-        }
         
         //transfer amount, it will take tax, burn, liquidity fee
         _tokenTransfer(from,to,amount,takeFee);
         //check if tokens can be withdrawn
         withdrawLockedTokens();
-    }
-
-    function addAccount(address addr) private returns (bool) {
-        for (uint i=0; i<accounts.length ;i++){
-            if (accounts[i] == addr){
-                return false;
-            }
-        }
-        accounts.push(addr);
     }
 
     function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
@@ -1363,22 +1293,14 @@ contract MemeCoin is Context, IERC20, Ownable {
             restoreAllFee();
     }
 
-    function takeFee(uint256 tAmount) private {
-        uint256 taxfee = (tAmount.mul(10**decimal)).mul(_taxFee).div(
-            10**2
-        );
-
-        lockTokenDeposit(taxfee, block.timestamp + 2592000);
-    }
-
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity, uint256 tDonation) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
+        //_reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        takeFee(tAmount);
+        lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
@@ -1388,9 +1310,9 @@ contract MemeCoin is Context, IERC20, Ownable {
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);           
         _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
+        //_reflectFee(rFee, tFee);
         _addToDonation(tDonation);
-        takeFee(tAmount);
+        lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
@@ -1400,15 +1322,16 @@ contract MemeCoin is Context, IERC20, Ownable {
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);   
         _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
+        //_reflectFee(rFee, tFee);
         _addToDonation(tDonation);
+        lockTokenDeposit(rFee, tFee, block.timestamp + 150); //2592000 is 30 days
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _addToDonation(uint256 tDonation) private {
 
         require(_charityAddress != address(0), "Charity Address cannot be zero address!");
-        require(tDonation >= 0, "Donation should be more than or zero");
         _tOwned[_charityAddress] += tDonation;
+        emit LogDonationFeeTransferred(tDonation);
     }
 }
