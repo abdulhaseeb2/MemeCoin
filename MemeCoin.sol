@@ -442,7 +442,7 @@
         uint8 private _decimals = 9;
 
         //TODO: Replace with actual donation address
-        address private constant donationAddress = '0x880DBB454F58feb935cf07EAC5AECeEAf641dA4A' //Test Acc 7
+        address private constant donationAddress = 0x880DBB454F58feb935cf07EAC5AECeEAf641dA4A; //Test Acc 7
         event LogDonationFeeTransferred(uint256 tDonationFee);
         
         struct TokenLock {
@@ -523,7 +523,7 @@
         function reflect(uint256 tAmount) public {
             address sender = _msgSender();
             require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-            (uint256 rAmount,,,,) = _getValues(tAmount);
+            (uint256 rAmount,,,,,) = _getValues(tAmount);
             _rOwned[sender] = _rOwned[sender].sub(rAmount);
             _rTotal = _rTotal.sub(rAmount);
             _tFeeTotal = _tFeeTotal.add(tAmount);
@@ -532,10 +532,10 @@
         function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
             require(tAmount <= _tTotal, "Amount must be less than supply");
             if (!deductTransferFee) {
-                (uint256 rAmount,,,,) = _getValues(tAmount);
+                (uint256 rAmount,,,,,) = _getValues(tAmount);
                 return rAmount;
             } else {
-                (,uint256 rTransferAmount,,,) = _getValues(tAmount);
+                (,uint256 rTransferAmount,,,,) = _getValues(tAmount);
                 return rTransferAmount;
             }
         }
